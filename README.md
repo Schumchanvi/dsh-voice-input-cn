@@ -112,6 +112,21 @@ A: 这是浏览器 `getUserMedia` 的 `NotFoundError`。检查 Windows 麦克风
 **Q: 延迟高**
 A: 识别为流式，理论上说完即出；若延迟明显，检查网络到阿里云的延迟，或换用更近的区域节点。
 
+**Q: 报 `NO_VALID_AUDIO_ERROR`**
+A: bridge 只接受**裸 PCM**（16kHz 单声道 int16）。如果你用自建脚本/客户端直连，别拼 WAV 头；本插件内置的 AudioWorklet 已输出纯 PCM，正常情况下不会出现此错误。
+
+**Q: 有回音/自己说话被识别**
+A: 麦克风流**不允许**连回 `AudioContext.destination`（回放）。本插件已断开该连接；若你魔改过，检查 worklet 是否接了 destination。
+
+**Q: 文字被填了两次 / 重复插入**
+A: 这是"停止提交"与"空闲提交"双触发的经典 bug。本插件统一由 `onState("idle")` 提交一次，手动点停不会再提交；若你魔改过，检查 stop 路径是否也提交了。
+
+**Q: 浏览器直连 DashScope 报 401**
+A: 这是预期的。DashScope ASR 的 WebSocket 鉴权在官方 SDK 内部完成，裸 WebSocket 无法携带签名。**必须走本地 bridge**（本仓库 `bridge/voice-bridge.py`）。
+
+**Q: bridge 端口被占用（Windows 报"address already in use"）**
+A: 说明已有 bridge 实例在跑（或别的程序占了 8765）。关掉旧的，或用 `set VOICE_BRIDGE_PORT=xxxx` 换端口（同时需在客户端改 `BRIDGE_URL`）。
+
 ## 📜 License
 
 MIT（保留原版 fork 版权声明；阿里云 DashScope 服务需遵守其使用条款）
