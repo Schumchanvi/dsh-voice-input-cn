@@ -1,6 +1,6 @@
 ﻿{
   "name": "dsh-voice-input-cn",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "Voice input plugin for DeepSeek Harness web (China-ready): Alibaba Cloud DashScope ASR via a local bridge. Mic button in the composer, streaming recognition, cursor-aware insertion, silence auto-stop.",
   "type": "module",
   "main": "lib/index.js",
