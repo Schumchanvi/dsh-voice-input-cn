@@ -3,4 +3,4 @@
 # applied automatically — do NOT also add it manually to the profile patch.
 - insert:
     - id: voice-input
-      name: '@local/dsh-plugin-voice-input'
+      name: 'dsh-voice-input-cn'
