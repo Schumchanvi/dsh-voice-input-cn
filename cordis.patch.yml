@@ -1,0 +1,6 @@
+# Loader entry inserted by `dsh plugin add` through the dsh.bundle patch.
+# When installing via `dsh plugin --profile web add <this-repo>`, this row is
+# applied automatically — do NOT also add it manually to the profile patch.
+- insert:
+    - id: voice-input
+      name: '@local/dsh-plugin-voice-input'
