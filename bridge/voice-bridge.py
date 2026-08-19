@@ -38,8 +38,8 @@ except ImportError:
     print("缺少 websockets 库，请先: pip install websockets")
     raise SystemExit(1)
 
-HOST = "127.0.0.1"
-PORT = 8765
+HOST = os.environ.get("VOICE_BRIDGE_HOST", "127.0.0.1")
+PORT = int(os.environ.get("VOICE_BRIDGE_PORT", "8765"))
 
 
 class BridgeCallback(RecognitionCallback):
@@ -255,10 +255,19 @@ _MAIN_LOOP = None  # 全局主事件循环引用，供后台线程发送消息
 async def main():
     global _MAIN_LOOP
     _MAIN_LOOP = asyncio.get_running_loop()
-    async with websockets.serve(handler, HOST, PORT):
-        print(f"[bridge] DashScope ASR 中转服务已启动: ws://{HOST}:{PORT}")
-        print("[bridge] 按 Ctrl+C 停止")
-        await asyncio.Future()
+    try:
+        async with websockets.serve(handler, HOST, PORT):
+            print(f"[bridge] DashScope ASR 中转服务已启动: ws://{HOST}:{PORT}")
+            print("[bridge] 按 Ctrl+C 停止")
+            await asyncio.Future()
+    except OSError as e:
+        if getattr(e, "errno", None) == 10048 or "address already in use" in str(e).lower():
+            print(f"[bridge] 端口 {PORT} 已被占用！")
+            print(f"[bridge] 可能已有另一个 bridge 实例在运行（请先关闭它），")
+            print(f"[bridge] 或用环境变量修改端口: set VOICE_BRIDGE_PORT=xxxx")
+        else:
+            print(f"[bridge] 启动失败: {e}")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
