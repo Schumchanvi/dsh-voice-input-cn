@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 DashScope ASR 本地中转服务 (voice-bridge)
@@ -17,7 +17,7 @@ DashScope ASR 本地中转服务 (voice-bridge)
     错误:         {"type": "error", "message": "..."}
 
 依赖: pip install dashscope websockets
-启动: python D:\\DS-work\\voice-bridge.py
+启动: python bridge/voice-bridge.py   （在仓库根目录下运行）
 """
 import asyncio
 import io
