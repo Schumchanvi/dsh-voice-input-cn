@@ -6,6 +6,8 @@
 
 > **本项目 fork 自 [NewDaNew/dsh-voice-input](https://github.com/NewDaNew/dsh-voice-input)**，原版使用 Web Speech API（Google 云端），在国内直连不可用；本版重写了识别引擎为**阿里云 DashScope ASR + 本地 bridge**。
 
+> **🛠 开发工具**：本插件在 **DeepSeek Harness (DSH)** 中开发与调试（代码重构、排障、测试均由 DSH 辅助完成）。DSH 是一个开源 AI 助手框架：https://github.com/deepseek-ai/dsh
+
 ---
 
 ## ✨ 功能
