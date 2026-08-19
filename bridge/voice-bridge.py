@@ -193,6 +193,21 @@ class ClientSession:
             await asyncio.sleep(0.1)
         self.rec = None
 
+    async def abort_if_active(self):
+        """浏览器连接断开时安全结束进行中的识别会话（幂等）。"""
+        if not self.collecting and self.rec is None:
+            return
+        self.collecting = False
+        rec = self.rec
+        self.rec = None
+        if rec is None:
+            return
+        try:
+            await asyncio.to_thread(rec.stop)
+            print("[bridge] 断连清理：已结束进行中的识别会话")
+        except Exception as e:
+            print(f"[bridge] 断连清理失败（可忽略）: {e}")
+
     def _threadsafe_send(self, payload):
         """从 DashScope 后台线程安全地发送消息到浏览器。"""
         if payload.get("type") in ("final", "complete"):
@@ -227,6 +242,9 @@ async def handler(websocket):
         pass
     finally:
         print("[bridge] 浏览器断开")
+        # 浏览器中途断开（刷新/崩溃/关页）时，必须结束进行中的识别会话，
+        # 否则 DashScope 流式连接会悬挂到服务端超时，浪费配额且阻塞后续会话。
+        await session.abort_if_active()
 
 
 _MAIN_LOOP = None  # 全局主事件循环引用，供后台线程发送消息
