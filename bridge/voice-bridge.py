@@ -22,6 +22,7 @@ DashScope ASR 本地中转服务 (voice-bridge)
 import asyncio
 import io
 import json
+import re
 import os
 import struct
 import wave
@@ -96,6 +97,8 @@ class ClientSession:
         self.ws = websocket
         self.key = None
         self.lang = "zh"
+        self.langs = None
+        self.vocabulary_id = (os.environ.get("DASHSCOPE_VOCABULARY_ID") or "").strip() or None
         self.rec = None
         self.collecting = False
         self._done = False
@@ -109,10 +112,23 @@ class ClientSession:
     async def handle_config(self, data):
         self.key = (data.get("key") or "").strip()
         lang = data.get("lang") or "auto"
-        self.lang = "en" if str(lang).startswith("en") else "zh"
+        # 2026-10-23: 支持中英混合 —— 'mixed' → ['zh','en']；
+        #   也可以用 langs 传任意组合（DashScope 接受 list）
+        raw_langs = data.get("langs")
+        if isinstance(raw_langs, list) and raw_langs:
+            self.langs = [str(x) for x in raw_langs if str(x).strip()]
+        elif str(lang).startswith("mixed") or str(lang) == "zh-en":
+            self.langs = ["zh", "en"]
+        else:
+            self.langs = ["en"] if str(lang).startswith("en") else ["zh"]
+        self.lang = self.langs[0]
+        # 2026-10-23: 热词表（paraformer-realtime-v2 的 vocabulary_id）
+        vid = (data.get("vocabularyId") or "").strip()
+        if vid:
+            self.vocabulary_id = vid
         if self.key:
             os.environ["DASHSCOPE_API_KEY"] = self.key
-            print(f"[bridge] key 已设置 (len={len(self.key)})")
+            print(f"[bridge] key 已设置 (len={len(self.key)}) langs={self.langs} vocab={self.vocabulary_id or '-'}")
 
     async def handle_start(self):
         if not self.key:
@@ -125,15 +141,18 @@ class ClientSession:
         # 启动流式识别会话
         try:
             cb = BridgeCallback(self._threadsafe_send)
-            self.rec = Recognition(
+            kwargs = dict(
                 model="paraformer-realtime-v2",
                 format="pcm",
                 sample_rate=16000,
-                language_hints=[self.lang],
+                language_hints=self.langs or [self.lang],
                 callback=cb,
             )
+            if self.vocabulary_id:
+                kwargs["vocabulary_id"] = self.vocabulary_id
+            self.rec = Recognition(**kwargs)
             await asyncio.to_thread(self.rec.start)
-            print("[bridge] 流式识别会话已启动 (format=pcm)")
+            print(f"[bridge] 流式识别会话已启动 (format=pcm, langs={self.langs}, vocab={self.vocabulary_id or '-'})")
         except Exception as e:
             print(f"[bridge] 启动识别失败: {e}")
             await self.send({"type": "error", "message": f"识别启动失败: {e}"})
@@ -219,8 +238,43 @@ class ClientSession:
             print(f"[bridge] (无事件循环，丢弃消息: {payload})")
 
 
+_ALLOWED_ORIGIN = re.compile(r"^https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$", re.IGNORECASE)
+
+
+def _origin_of(websocket):
+    """取握手请求的 Origin（兼容 websockets 新老版本）。"""
+    try:
+        req = getattr(websocket, "request", None)
+        if req is not None and getattr(req, "headers", None) is not None:
+            return req.headers.get("Origin")
+        hdrs = getattr(websocket, "request_headers", None)
+        if hdrs is not None:
+            return hdrs.get("Origin")
+    except Exception:
+        pass
+    return None
+
+
 async def handler(websocket):
-    print(f"[bridge] 浏览器连接: {websocket.remote_address}")
+    origin = _origin_of(websocket)
+    # 2026-10-23 加：只接受来自本机页面的连接，挡掉任意网页偷偷用你的 key 跑识别。
+    #   Origin 为空的（本机脚本/测试客户端）放行；设 VOICE_BRIDGE_STRICT=1 可全部拒绝。
+    if origin:
+        if not _ALLOWED_ORIGIN.match(origin):
+            print(f"[bridge] 拒绝来源: {origin}")
+            try:
+                await websocket.close(code=1008, reason="origin not allowed")
+            except Exception:
+                pass
+            return
+    elif os.environ.get("VOICE_BRIDGE_STRICT") == "1":
+        print("[bridge] 拒绝无 Origin 的连接（STRICT）")
+        try:
+            await websocket.close(code=1008, reason="origin required")
+        except Exception:
+            pass
+        return
+    print(f"[bridge] 浏览器连接: {websocket.remote_address} origin={origin or '-'}")
     session = ClientSession(websocket)
     try:
         async for message in websocket:
@@ -256,7 +310,7 @@ async def main():
     global _MAIN_LOOP
     _MAIN_LOOP = asyncio.get_running_loop()
     try:
-        async with websockets.serve(handler, HOST, PORT):
+        async with websockets.serve(handler, HOST, PORT, max_size=2 ** 20, ping_interval=20, ping_timeout=20):
             print(f"[bridge] DashScope ASR 中转服务已启动: ws://{HOST}:{PORT}")
             print("[bridge] 按 Ctrl+C 停止")
             await asyncio.Future()
